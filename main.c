@@ -3,13 +3,26 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 
 struct jobInfo
 {
 
     unsigned char jobType;
+
     char jobName[100];
+
     int jobPriority;
+    int strideVal;
+    int passVal;
+};
+
+struct jobQueue
+{
+
+    struct jobInfo job;
+
+    char freeSlot;
 };
 
 // handle incoming argument vector
@@ -55,24 +68,23 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
 
     */
 
-    //set up local variables
+    // set up local variables
     char *currentStringPos = jobStringInput;
     int whiteSpaceCount = 0;
     char copyStringBuffer[100];
 
     memset(&copyStringBuffer, 0, sizeof(copyStringBuffer));
 
-
-    //find where the string ends either with a comman or a newline 
-    while (currentStringPos[whiteSpaceCount]++ != (',' || '\n') )
+    // find where the string ends either with a comman or a newline
+    while (currentStringPos[whiteSpaceCount]++ != (',' || '\n'))
     {
 
         whiteSpaceCount++;
     }
     whiteSpaceCount++;
 
-    //compare the full string to some consts to find what job it is and set struct accordingly
-    //job values are listed at top
+    // compare the full string to some consts to find what job it is and set struct accordingly
+    // job values are listed at top
     if (!strncmp(jobStringInput, "newjob", whiteSpaceCount))
     {
 
@@ -160,39 +172,171 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
 
 int getJob(int jobFD, struct jobInfo *jobInfoInput)
 {
-    //set up variables
+    // set up variables
     char *jobString = NULL;
     int translateJobRetVal = 0;
+
+    errno = 0;
 
     // read line of file
     if (getline(jobString, NULL, jobFD) == -1)
     {
 
+        if (!errno)
+        { // check to see if eof was reached and return with job list complete code
+
+            return 2;
+        }
+        // if it was errno was set then print error and return 1
         perror("error with getline(jobString,NULL,jobFD): ");
 
         return 1;
     }
 
-    //translate the string into a job
-    if(translateJobRetVal = translateJob(jobString,jobInfoInput)){
-        //if there is an error print what happend and return 1
-        if(translateJobRetVal == 2){
+    // translate the string into a job
+    if (translateJobRetVal = translateJob(jobString, jobInfoInput))
+    {
+        // if there is an error print what happend and return 1
+        if (translateJobRetVal == 2)
+        {
 
             printf("error in translateJob(): expected job opcode \n");
-
         }
 
         printf("error in translateJob() \n");
 
         return 1;
-
     }
 
     // free the string the came from getline() since we now have it in are struct
     free(jobString);
 
-
     return 0;
+}
+
+struct jobInfo getLowestJob(struct jobQueue *jobQueueInput, int queueSizeInput)
+{
+}
+
+int expandQueueSize(struct jobQueue *jobQueueInput, int queueSizeInput)
+{
+
+    // ran to expand the the queueSize
+    struct jobQueue *newJobQueueInput = calloc(queueSizeInput + 10, sizeof(struct jobQueue));
+
+    if (!newJobQueueInput)
+    {
+
+        perror("error in expandQueueSize() with calloc(): ");
+
+        return 1;
+    }
+
+    for (int i = 0; i < queueSizeInput; i++)
+    {
+
+        if (jobQueueInput[i].freeSlot)
+        {
+
+            newJobQueueInput[i].freeSlot = 1;
+            newJobQueueInput[i].job = jobQueueInput[i].job;
+        }
+    }
+
+    free(jobQueueInput);
+
+    jobQueueInput = newJobQueueInput;
+
+    return queueSizeInput + 10;
+}
+
+int addJobToQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo newJobInput)
+{
+
+    struct jobQueue *newJobQueueInput = NULL;
+
+    newJobInput.strideVal = 10000 / newJobInput.jobPriority;
+
+    while (1)
+    {
+
+        for (int i = 0; i < queueSizeInput; i++)
+        {
+
+            if (!jobQueueInput[i].freeSlot)
+            {
+
+                jobQueueInput[i].job.jobPriority = newJobInput.jobPriority;
+                jobQueueInput[i].job.jobType = newJobInput.jobType;
+                jobQueueInput[i].job.strideVal = newJobInput.strideVal;
+                strcpy(jobQueueInput[i].job.jobName, newJobInput.jobName);
+
+                jobQueueInput[i].freeSlot = 1;
+
+                return queueSizeInput;
+            }
+        }
+
+        if(queueSizeInput = expandQueueSize(jobQueueInput,queueSizeInput)){
+
+            return 1;
+
+        }
+
+    }
+}
+
+int mainScheduler(int jobListFD)
+{
+
+    struct jobInfo currentJob;
+
+    int queueSize = 10;
+    struct jobQueue *jobsQueue = calloc(10, sizeof(struct jobQueue));
+
+    if (!jobsQueue)
+    {
+
+        perror("problem with calloc(): ");
+
+        return 1;
+    }
+
+    memset(&currentJob, 0, sizeof(struct jobInfo));
+
+    while (!getJob(jobListFD, &currentJob))
+    {
+
+        switch (currentJob.jobType)
+        {
+        case 0:
+
+            break;
+        case 1:
+
+            break;
+        case 2:
+
+            break;
+        case 3:
+
+            break;
+        case 4:
+
+            break;
+        case 5:
+
+            break;
+        case 6:
+
+            break;
+        case 7:
+
+            break;
+        }
+    }
+
+    free(jobsQueue);
 }
 
 int main(int argc, char *argv[])
