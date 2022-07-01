@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <limits.h>
 
 struct jobInfo
 {
@@ -13,18 +14,28 @@ struct jobInfo
     char jobName[100];
 
     int jobPriority;
-    int strideVal;
-    int passVal;
+};
+
+struct jobState
+{
+
+    char jobName[100];
+
+    int jobPriority;
+
+    unsigned int passLevel;
+    unsigned int stride;
+
+    char blocked;
 };
 
 struct jobQueue
 {
 
-    struct jobInfo job;
+    struct jobState *theJob;
 
-    char freeSlot;
-
-    char jobBlocked;
+    struct jobQueue *nextLink;
+    struct jobQueue *backLink;
 };
 
 // handle incoming argument vector
@@ -106,9 +117,9 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
             whiteSpaceCount++;
         }
 
-        strncpy(&copyStringBuffer, currentStringPos, whiteSpaceCount);
+        strncpy(copyStringBuffer, currentStringPos, whiteSpaceCount);
 
-        if (jobInfoInput->jobPriority = atoi(&copyStringBuffer))
+        if ((jobInfoInput->jobPriority = atoi(copyStringBuffer)))
         {
 
             perror("error with atoi(&copyStringBuffer): ");
@@ -172,16 +183,16 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
     return 2;
 }
 
-int getJob(int jobFD, struct jobInfo *jobInfoInput)
+int getJob(FILE *fileFDInput, struct jobInfo *jobInfoInput)
 {
     // set up variables
-    char *jobString = NULL;
+    char **jobString = NULL;
     int translateJobRetVal = 0;
 
     errno = 0;
 
     // read line of file
-    if (getline(jobString, NULL, jobFD) == -1)
+    if (getline(jobString, NULL, fileFDInput) == -1)
     {
 
         if (!errno)
@@ -196,7 +207,7 @@ int getJob(int jobFD, struct jobInfo *jobInfoInput)
     }
 
     // translate the string into a job
-    if (translateJobRetVal = translateJob(jobString, jobInfoInput))
+    if ((translateJobRetVal = translateJob(*jobString, jobInfoInput)))
     {
         // if there is an error print what happend and return 1
         if (translateJobRetVal == 2)
@@ -216,372 +227,589 @@ int getJob(int jobFD, struct jobInfo *jobInfoInput)
     return 0;
 }
 
-int alphabeticalDetermine(char *stringInput1, char *stringInput2)
+int alphabeticalOrder(struct jobState *job1, struct jobState *job2)
 {
 
-    while (1)
+    for (int i = 0; i < 100; i++)
     {
 
-        if (stringInput1 > stringInput2)
+        if (job1->jobName[i] == 0 || job2->jobName[i] == 0)
         {
 
-            return 1;
-        }
-        else if (stringInput1 < stringInput2)
-        {
-
-            return 2;
-        }
-
-        if (stringInput1 == 0 && stringInput2 == 0)
-        {
-
-            return 0;
-        }
-        else if (stringInput1 == 0)
-        {
-
-            return 2;
-        }
-        else if (stringInput2 == 0)
-        {
-
-            return 1;
-        }
-
-        stringInput1++;
-        stringInput2++;
-    }
-}
-
-int getLowestJob(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo *jobLowest)
-{
-
-    struct jobInfo *jobInfoRet;
-
-    jobInfoRet->passVal = 10000;
-
-    int returnVal = 1;
-
-    for (int i = 0; i < queueSizeInput; i++)
-    {
-        if (jobQueueInput[i].freeSlot && !jobQueueInput[i].jobBlocked)
-        {
-
-            returnVal = 0;
-
-            if (jobInfoRet->passVal > jobQueueInput[i].job.passVal)
+            if (job1->jobName[i] == 0)
             {
 
-                jobInfoRet = &jobQueueInput[i].job;
+                return 0;
             }
-            else if (jobInfoRet->passVal == jobQueueInput[i].job.passVal)
+            else if (job2->jobName[i] == 0)
             {
 
-                if (alphabeticalDetermine(jobInfoRet->jobName, jobQueueInput[i].job.jobName) == 1)
-                {
+                return 1;
+            }
+        }
+        else
+        {
 
-                    jobInfoRet = &jobQueueInput[i].job;
-                }
+            if (job1->jobName[i] < job2->jobName[i])
+            {
+
+                return 0;
+            }
+            else if (job1->jobName[i] > job2->jobName[i])
+            {
+
+                return 1;
             }
         }
     }
 
-    jobLowest = jobInfoRet;
-
-    jobLowest->passVal += jobLowest->strideVal;
-
-    return returnVal;
+    return 0;
 }
 
-int expandQueueSize(struct jobQueue *jobQueueInput, int queueSizeInput)
+void resetQueuePassVals(struct jobQueue *queueInput)
 {
 
-    // ran to expand the the queueSize
-    struct jobQueue *newJobQueueInput = calloc(queueSizeInput + 10, sizeof(struct jobQueue));
+    struct jobQueue *currentNode = queueInput->nextLink;
 
-    if (!newJobQueueInput)
+    while ((currentNode))
     {
 
-        perror("error in expandQueueSize() with calloc(): ");
+        if (currentNode->theJob)
+        {
+
+            currentNode->theJob->passLevel = currentNode->theJob->stride;
+        }
+        else
+        {
+
+            break;
+        }
+
+        currentNode = currentNode->nextLink;
+    }
+}
+
+int addJobToQueue(struct jobQueue *queueInput, struct jobInfo newJobInput)
+{
+
+    struct jobQueue *currentNode = queueInput;
+    struct jobQueue *prevNode = NULL;
+    struct jobQueue *newNode = calloc(1, sizeof(struct jobQueue));
+
+    if (!newNode)
+    {
+
+        perror("error with calloc() in addJobToQueue(): ");
 
         return 1;
     }
 
-    for (int i = 0; i < queueSizeInput; i++)
+    newNode->theJob = calloc(1, sizeof(struct jobState));
+
+    if (!newNode->theJob)
     {
 
-        if (jobQueueInput[i].freeSlot)
+        perror("error with calloc() in addJobToQueue(): ");
+
+        return 1;
+    }
+
+    newNode->theJob->jobPriority = newJobInput.jobPriority;
+    newNode->theJob->stride = UINT_MAX / newJobInput.jobPriority;
+    newNode->theJob->passLevel = newNode->theJob->stride;
+    strcpy(newNode->theJob->jobName, newJobInput.jobName);
+
+    resetQueuePassVals(queueInput);
+
+    while ((currentNode = currentNode->nextLink))
+    {
+
+        if (currentNode->theJob->passLevel > newNode->theJob->passLevel)
         {
 
-            newJobQueueInput[i].freeSlot = 1;
-            newJobQueueInput[i].job = jobQueueInput[i].job;
-            newJobQueueInput[i].jobBlocked = jobQueueInput[i].jobBlocked;
+            currentNode->backLink->nextLink = newNode;
+            currentNode->backLink = newNode;
+
+            newNode->backLink = currentNode->backLink;
+            newNode->nextLink = currentNode;
+
+            return 0;
         }
-    }
-
-    free(jobQueueInput);
-
-    jobQueueInput = newJobQueueInput;
-
-    return queueSizeInput + 10;
-}
-
-void resetQueuePass(struct jobQueue *jobQueueInput, int queueSizeInput)
-{
-
-    for (int i = 0; i < queueSizeInput; i++)
-    {
-
-        jobQueueInput[i].job.passVal = jobQueueInput[i].job.strideVal;
-    }
-}
-
-int addJobToQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo newJobInput)
-{
-
-    struct jobQueue *newJobQueueInput = NULL;
-
-    newJobInput.strideVal = 10000 / newJobInput.jobPriority;
-    newJobInput.passVal = newJobInput.strideVal;
-
-    while (1)
-    {
-
-        for (int i = 0; i < queueSizeInput; i++)
+        else if (currentNode->theJob->passLevel == newNode->theJob->passLevel)
         {
 
-            if (!jobQueueInput[i].freeSlot)
+            if (alphabeticalOrder(currentNode->theJob, newNode->theJob))
             {
 
-                jobQueueInput[i].job.jobPriority = newJobInput.jobPriority;
-                jobQueueInput[i].job.jobType = newJobInput.jobType;
-                jobQueueInput[i].job.strideVal = newJobInput.strideVal;
-                strcpy(jobQueueInput[i].job.jobName, newJobInput.jobName);
+                currentNode->backLink->nextLink = newNode;
+                currentNode->backLink = newNode;
 
-                jobQueueInput[i].freeSlot = 1;
+                newNode->backLink = currentNode->backLink;
+                newNode->nextLink = currentNode;
 
-                resetQueuePass(jobQueueInput, queueSizeInput);
-
-                return queueSizeInput;
+                return 0;
             }
         }
 
-        if (queueSizeInput = expandQueueSize(jobQueueInput, queueSizeInput))
-        {
-
-            return 1;
-        }
-    }
-}
-
-void unblockJob(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo jobToUnblockInput){
-
-    for (int i = 0; i < queueSizeInput; i++)
-    {
-        
-        if(!strcmp(jobQueueInput[i].job.jobName,jobToUnblockInput.jobName)){
-
-            jobQueueInput[i].jobBlocked = 0;
-
-            break;
-
-        }
-
-    }
-    
-
-}
-
-void blockJob(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo *jobToBlockInput){
-
-    for (int i = 0; i < queueSizeInput; i++)
-    {
-
-        if (&jobQueueInput[i].job == jobToBlockInput)
-        {
-
-            jobQueueInput[i].jobBlocked = 1;
-        }
+        prevNode = currentNode;
     }
 
+    prevNode->nextLink = newNode;
+
+    newNode->backLink = prevNode;
+
+    newNode->nextLink = NULL;
+
+    return 0;
 }
 
-void removeFromQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo *removedJobInput)
+void reAddToQueue(struct jobQueue *queueInput, struct jobQueue *jobToReAdd)
 {
 
-    for (int i = 0; i < queueSizeInput; i++)
+    struct jobQueue *currentNode = queueInput;
+    struct jobQueue *prevNode = NULL;
+
+    if (!currentNode->nextLink)
     {
 
-        if (&jobQueueInput[i].job == removedJobInput)
+        currentNode->nextLink = jobToReAdd;
+
+        return;
+    }
+
+    while ((currentNode = currentNode->nextLink))
+    {
+
+        if (currentNode->theJob->passLevel > jobToReAdd->theJob->passLevel)
         {
 
-            jobQueueInput[i].freeSlot = 0;
+            currentNode->backLink->nextLink = jobToReAdd;
+            currentNode->backLink = jobToReAdd;
+
+            jobToReAdd->backLink = currentNode->backLink;
+            jobToReAdd->nextLink = currentNode;
+
+            return;
         }
+        else if (currentNode->theJob->passLevel == jobToReAdd->theJob->passLevel)
+        {
+
+            if (alphabeticalOrder(currentNode->theJob, jobToReAdd->theJob))
+            {
+
+                currentNode->backLink->nextLink = jobToReAdd;
+                currentNode->backLink = jobToReAdd;
+
+                jobToReAdd->backLink = currentNode->backLink;
+                jobToReAdd->nextLink = currentNode;
+
+                return;
+            }
+        }
+
+        prevNode = currentNode;
     }
+
+    prevNode->nextLink = jobToReAdd;
+
+    jobToReAdd->backLink = prevNode;
+
+    jobToReAdd->nextLink = NULL;
 }
 
-void listRunnables(struct jobQueue *jobQueueInput, int queueSizeInput){
+struct jobQueue *getMinJob(struct jobQueue *queueInput)
+{
 
-    struct jobInfo *tempStoredJob = NULL;
+    struct jobQueue *currentNode = queueInput->nextLink;
 
-    int anyRunnables = 0;
+    struct jobQueue *returnJob = NULL;
 
-    for(int i = 0; i < queueSizeInput; i++){
+    while (currentNode)
+    {
 
-        if(jobQueueInput[i].freeSlot && !jobQueueInput[i].jobBlocked){
+        if (!currentNode->theJob->blocked)
+        {
 
-            anyRunnables = 1;
+            returnJob = currentNode;
 
-            tempStoredJob = &jobQueueInput[i];
+            break;
+        }
 
-            for(int x = 0; x < queueSizeInput; x++){
+        currentNode = currentNode->nextLink;
+    }
 
-                if(tempStoredJob->passVal > jobQueueInput[x].job.passVal){
+    if (returnJob->backLink)
+    {
 
+        returnJob->backLink->nextLink = returnJob->nextLink;
+    }
 
+    if (returnJob->nextLink)
+    {
 
+        returnJob->nextLink->backLink = returnJob->backLink;
+    }
+
+    returnJob->theJob->passLevel += returnJob->theJob->stride;
+
+    return returnJob;
+}
+
+struct jobQueue *unblockJob(struct jobQueue *queueInput, struct jobInfo nameOfJobInput, int *runStatus)
+{
+
+    struct jobQueue *currentNode = queueInput;
+
+    while ((currentNode = currentNode->nextLink))
+    {
+
+        if (!strcmp(currentNode->theJob->jobName, nameOfJobInput.jobName))
+        {
+
+            if (currentNode->theJob->blocked)
+            {
+
+                currentNode->theJob->blocked = 0;
+
+                if (currentNode->backLink)
+                {
+
+                    currentNode->backLink->nextLink = currentNode->nextLink;
                 }
 
-            }
+                if (currentNode->nextLink)
+                {
 
+                    currentNode->nextLink->backLink = currentNode->backLink;
+                }
+
+                return currentNode;
+            }
+            else
+            {
+
+                *runStatus = 1;
+
+                return NULL;
+            }
         }
+    }
+
+    *runStatus = 2;
+
+    return NULL;
+}
+
+int listBlocked(struct jobQueue *queueInput)
+{
+
+    struct jobQueue *currentNode = queueInput;
+
+    if (!currentNode->nextLink)
+    {
+
+        return 1;
+    }
+
+    printf("Blocked: \n");
+    printf("NAME    STRIDE  PASS  PRI \n");
+
+    while ((currentNode = currentNode->nextLink))
+    {
+
+        if (currentNode->theJob->blocked)
+        {
+
+            printf("%s       %d     %d  %d \n", currentNode->theJob->jobName, currentNode->theJob->stride, currentNode->theJob->passLevel, currentNode->theJob->jobPriority);
+        }
+    }
+
+    return 0;
+}
+
+int listRunnables(struct jobQueue *queueInput)
+{
+
+    struct jobQueue *currentNode = queueInput;
+
+    if (!currentNode->nextLink)
+    {
+
+        return 1;
+    }
+
+    printf("Runnable: \n");
+    printf("NAME    STRIDE  PASS  PRI \n");
+
+    while ((currentNode = currentNode->nextLink))
+    {
+
+        if (!currentNode->theJob->blocked)
+        {
+
+            printf("%s       %d     %d  %d \n", currentNode->theJob->jobName, currentNode->theJob->stride, currentNode->theJob->passLevel, currentNode->theJob->jobPriority);
+        }
+    }
+
+    return 0;
+}
+
+void freeTheQueue(struct jobQueue *queueInput){
+
+    struct jobQueue *currentNode = queueInput->nextLink;
+    struct jobQueue *prevNode = queueInput->nextLink;
+
+    if(!prevNode){
+
+        free(queueInput);
+
+        return;
 
     }
 
+    if(!currentNode->nextLink){
+
+        free(currentNode->theJob);
+        free(currentNode);
+        free(queueInput);
+
+        return;
+
+    }
+
+    while ((currentNode = currentNode->nextLink))
+    {
+        
+        free(prevNode->theJob);
+        free(prevNode);
+
+        prevNode = currentNode;
+
+    }
+
+    free(prevNode->theJob);
+    free(prevNode);
+    free(queueInput);
+
 }
 
-int mainScheduler(int jobListFD)
+int mainScheduler(FILE *fileFDInput)
 {
 
     struct jobInfo currentJob;
-    struct jobInfo *runningJob = NULL;
 
-    int queueSize = 10;
-    struct jobQueue *jobsQueue = calloc(10, sizeof(struct jobQueue));
+    struct jobQueue *headNode = calloc(1, sizeof(struct jobQueue));
 
-    if (!jobsQueue)
+    struct jobQueue *currentRunningJob = NULL;
+
+    struct jobQueue *NextRunningJob = NULL;
+
+    int functionReturnCode = 0;
+
+    if (!headNode)
     {
 
-        perror("problem with calloc(): ");
+        perror("error with calloc(1,sizeof(struct jobQueue*)) in mainScheduler(FILE *fileFDInput): ");
 
         return 1;
     }
 
     memset(&currentJob, 0, sizeof(struct jobInfo));
 
-    while (!getJob(jobListFD, &currentJob))
+    while (!getJob(fileFDInput, &currentJob))
     {
 
         switch (currentJob.jobType)
         {
         case 0:
 
-            if ((queueSize = addJobToQueue(jobsQueue, queueSize, currentJob)) == 1)
+            if (addJobToQueue(headNode, currentJob))
             {
+
+                printf("failure in addJobToQueue() withen mainScheduler() \n");
 
                 return 1;
             }
 
-            if (!runningJob)
+            if (currentRunningJob)
             {
 
-                if (getLowestJob(jobsQueue, queueSize, runningJob))
+                currentRunningJob->theJob->passLevel = currentRunningJob->theJob->stride;
+            }
+            else
+            {
+
+                if (!(currentRunningJob = getMinJob(headNode)))
                 {
 
-                    runningJob = NULL;
+                    printf("No jobs in Queue \n");
+
+                    break;
                 }
             }
 
-            printf("New job: %s added with priority: %d", currentJob.jobName, currentJob.jobPriority);
+            printf("New job: %s added with priority: %d \n", currentJob.jobName, currentJob.jobPriority);
 
             break;
         case 1:
 
-            if (!runningJob)
+            if (!currentRunningJob)
             {
 
                 printf("Error. System is idle. \n");
+
+                break;
             }
 
-            removeFromQueue(jobsQueue, queueSize, runningJob);
+            printf("Job: %s completed. \n", currentRunningJob->theJob->jobName);
 
-            printf("Job: %s completed.", runningJob->jobName);
-
-            if (getLowestJob(jobsQueue, queueSize, runningJob))
-            {
-
-                runningJob = NULL;
-            }
+            free(currentRunningJob->theJob);
+            free(currentRunningJob);
 
             break;
         case 2:
 
-            if (!runningJob)
+            if (!currentRunningJob)
             {
 
                 printf("Error. System is idle. \n");
+
+                break;
             }
 
-            if (getLowestJob(jobsQueue, queueSize, runningJob))
+            reAddToQueue(headNode, currentRunningJob);
+
+            if (!(currentRunningJob = getMinJob(headNode)))
             {
 
-                runningJob = NULL;
+                printf("No jobs in Queue \n");
 
-            }else{
-
-                printf("Job: %s scheduled.", runningJob->jobName);
-
+                break;
             }
+
+            printf("Job: %s scheduled. \n", currentRunningJob->theJob->jobName);
 
             break;
         case 3:
 
-            if (!runningJob)
+            if (!currentRunningJob)
             {
 
                 printf("Error. System is idle. \n");
+
+                break;
             }
 
-            blockJob(jobsQueue, queueSize, runningJob);
+            printf("Job: %s blocked. \n", currentRunningJob->theJob->jobName);
 
-            printf("Job: %s blocked.", runningJob->jobName);
+            currentRunningJob->theJob->blocked = 1;
 
-            if (getLowestJob(jobsQueue, queueSize, runningJob))
+            if (!(currentRunningJob = getMinJob(headNode)))
             {
 
-                runningJob = NULL;
+                printf("No jobs in Queue \n");
 
+                break;
             }
 
             break;
         case 4:
 
+            if (!(NextRunningJob = unblockJob(headNode, currentJob, &functionReturnCode)))
+            {
+
+                if (functionReturnCode == 2)
+                {
+
+                    printf("No such job to unblock \n");
+
+                    break;
+                }
+                else
+                {
+
+                    printf("Error. Job: %s not blocked. \n", currentJob.jobName);
+
+                    break;
+                }
+            }
+
+            NextRunningJob->theJob->passLevel += NextRunningJob->theJob->stride;
+
+            printf("Job: %s has unblocked. Pass set to: %d \n", NextRunningJob->theJob->jobName, NextRunningJob->theJob->passLevel);
+
+            reAddToQueue(headNode, currentRunningJob);
+
+            currentRunningJob = NextRunningJob;
+
+            NextRunningJob = NULL;
+
             break;
         case 5:
+
+            if (listRunnables(headNode))
+            {
+
+                printf("Queue is empty \n");
+            }
 
             break;
         case 6:
 
+            if (!currentRunningJob)
+            {
+
+                printf("Error. System is idle. \n");
+
+                break;
+            }
+            else
+            {
+
+                printf("Running: \n");
+                printf("NAME    STRIDE  PASS  PRI \n");
+
+                printf("%s       %d     %d  %d \n", currentRunningJob->theJob->jobName, currentRunningJob->theJob->stride, currentRunningJob->theJob->passLevel, currentRunningJob->theJob->jobPriority);
+            }
+
             break;
         case 7:
 
+            if (listBlocked(headNode))
+            {
+
+                printf("Queue is empty \n");
+            }
+
+            break;
+        default:
             break;
         }
     }
 
-    free(jobsQueue);
+    freeTheQueue(headNode);
+    free(currentRunningJob->theJob);
+    free(currentRunningJob);
+
+    if(NextRunningJob){
+
+        free(NextRunningJob->theJob);
+        free(NextRunningJob);
+
+    }
+
+    return 0;
 }
 
 int main(int argc, char *argv[])
 {
 
-    char schecdularJobFileInputPath = 0;
+    char *schecdularJobFileInputPath = NULL;
 
-    int schecdularJobFileDesciptor = 0;
+    FILE *fileFD = NULL;
 
     // setup program by getting input file argument and opening the file
-    if (handleArgs(argc, argv, &schecdularJobFileInputPath))
+    if (handleArgs(argc, argv, schecdularJobFileInputPath))
     {
 
         printf("error in handle args: invaild argument given \n");
@@ -589,14 +817,31 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if ((schecdularJobFileDesciptor = open(schecdularJobFileInputPath, O_RDONLY)) == -1)
+    if (!(fileFD = fopen(schecdularJobFileInputPath, "r")))
     {
 
-        perror("error in open(schecdularJobFileInputPath,O_RDONLY): ");
+        perror("error in fopen(schecdularJobFileInputPath,\"r\"): ");
 
         return 1;
     }
     // finish setup start performing scheduling
+
+    if(mainScheduler(fileFD)){
+
+        printf("error in mainScheduler() \n");
+
+        return 1;
+
+    }
+
+    //close the file stream
+    if (fclose(fileFD))
+    {
+
+        perror("error in fclose(fileFD): ");
+
+        return 1;
+    }
 
     return 0;
 }
