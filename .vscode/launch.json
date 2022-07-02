@@ -10,7 +10,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/a.out",
-            "args": ["-i", "test.txt", "-1", "cowsay", "-a", "weAreFamily.txt.txt"],
+            "args": ["-i", "test1.txt"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

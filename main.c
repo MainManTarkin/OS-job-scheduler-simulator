@@ -6,6 +6,12 @@
 #include <errno.h>
 #include <limits.h>
 
+struct argStruct{
+
+    char *inputFIleDest;
+
+};
+
 struct jobInfo
 {
 
@@ -39,10 +45,10 @@ struct jobQueue
 };
 
 // handle incoming argument vector
-int handleArgs(int argcInput, char **argvInput, char *inputFilePath)
+int handleArgs(int argcInput, char **argvInput, struct argStruct *inputFilePath)
 {
 
-    char getOptReturn = 0;
+    int getOptReturn = 0;
 
     while ((getOptReturn = getopt(argcInput, argvInput, "i:")) != -1)
     {
@@ -52,7 +58,7 @@ int handleArgs(int argcInput, char **argvInput, char *inputFilePath)
         case 'i':
 
             // get input path for file
-            inputFilePath = optarg;
+            inputFilePath->inputFIleDest = optarg;
             break;
 
         default:
@@ -83,18 +89,27 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
 
     // set up local variables
     char *currentStringPos = jobStringInput;
+    int baseCount = 0;
     int whiteSpaceCount = 0;
     char copyStringBuffer[100];
 
     memset(&copyStringBuffer, 0, sizeof(copyStringBuffer));
 
     // find where the string ends either with a comman or a newline
-    while (currentStringPos[whiteSpaceCount]++ != (',' || '\n'))
-    {
+    while(1){
 
-        whiteSpaceCount++;
+        if(jobStringInput[whiteSpaceCount] != ','  && jobStringInput[whiteSpaceCount] != '\n' && jobStringInput[whiteSpaceCount] != 0){
+
+            whiteSpaceCount++;
+
+        }else{
+
+            break;
+
+        }
+
     }
-    whiteSpaceCount++;
+    
 
     // compare the full string to some consts to find what job it is and set struct accordingly
     // job values are listed at top
@@ -102,24 +117,45 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
     {
 
         jobInfoInput->jobType = 0;
-
-        while (currentStringPos[whiteSpaceCount]++ != ',')
+        baseCount = ++whiteSpaceCount;
+        while (1)
         {
 
-            whiteSpaceCount++;
+            if(jobStringInput[whiteSpaceCount] != ','){
+
+                whiteSpaceCount++;
+                
+            }else{
+
+                break;
+
+            }
+            
         }
 
-        strncpy(jobInfoInput->jobName, currentStringPos, whiteSpaceCount);
+        strncpy(jobInfoInput->jobName, jobStringInput + baseCount, whiteSpaceCount - baseCount);
 
-        while (currentStringPos[whiteSpaceCount]++ != '\n')
+        baseCount = ++whiteSpaceCount;
+
+        while (1)
         {
 
-            whiteSpaceCount++;
+            if(jobStringInput[whiteSpaceCount] != 0 && jobStringInput[whiteSpaceCount] != '\n'){
+
+                whiteSpaceCount++;
+                
+            }else{
+
+                break;
+
+            }
+            
+            
         }
 
-        strncpy(copyStringBuffer, currentStringPos, whiteSpaceCount);
+        strncpy(copyStringBuffer, jobStringInput + baseCount, whiteSpaceCount - baseCount);
 
-        if ((jobInfoInput->jobPriority = atoi(copyStringBuffer)))
+        if (!(jobInfoInput->jobPriority = atoi(copyStringBuffer)))
         {
 
             perror("error with atoi(&copyStringBuffer): ");
@@ -152,13 +188,24 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
 
         jobInfoInput->jobType = 4;
 
-        while (currentStringPos[whiteSpaceCount]++ != '\n')
+        baseCount = ++whiteSpaceCount;
+        while (1)
         {
 
-            whiteSpaceCount++;
+            if(jobStringInput[whiteSpaceCount] != 0 && jobStringInput[whiteSpaceCount] != '\n'){
+
+                whiteSpaceCount++;
+                
+            }else{
+
+                break;
+
+            }
+            
+            
         }
 
-        strncpy(jobInfoInput->jobName, currentStringPos, whiteSpaceCount);
+        strncpy(jobInfoInput->jobName, jobStringInput+baseCount, whiteSpaceCount - baseCount);
         return 0;
     }
     else if (!strncmp(jobStringInput, "runnable", whiteSpaceCount))
@@ -186,28 +233,31 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
 int getJob(FILE *fileFDInput, struct jobInfo *jobInfoInput)
 {
     // set up variables
-    char **jobString = NULL;
+    size_t jobStringSize = 255;
+    char *jobString = calloc(jobStringSize,sizeof(char));
     int translateJobRetVal = 0;
+    ssize_t bytesRead = 0;
 
     errno = 0;
 
     // read line of file
-    if (getline(jobString, NULL, fileFDInput) == -1)
+    if ((bytesRead = getline(&jobString, &jobStringSize, fileFDInput)) == -1)
     {
 
         if (!errno)
         { // check to see if eof was reached and return with job list complete code
 
+            free(jobString);
             return 2;
         }
         // if it was errno was set then print error and return 1
         perror("error with getline(jobString,NULL,jobFD): ");
-
+        free(jobString);
         return 1;
     }
 
     // translate the string into a job
-    if ((translateJobRetVal = translateJob(*jobString, jobInfoInput)))
+    if ((translateJobRetVal = translateJob(jobString, jobInfoInput)))
     {
         // if there is an error print what happend and return 1
         if (translateJobRetVal == 2)
@@ -293,7 +343,7 @@ int addJobToQueue(struct jobQueue *queueInput, struct jobInfo newJobInput)
 {
 
     struct jobQueue *currentNode = queueInput;
-    struct jobQueue *prevNode = NULL;
+    struct jobQueue *prevNode = queueInput;
     struct jobQueue *newNode = calloc(1, sizeof(struct jobQueue));
 
     if (!newNode)
@@ -367,7 +417,7 @@ void reAddToQueue(struct jobQueue *queueInput, struct jobQueue *jobToReAdd)
 {
 
     struct jobQueue *currentNode = queueInput;
-    struct jobQueue *prevNode = NULL;
+    struct jobQueue *prevNode = queueInput;
 
     if (!currentNode->nextLink)
     {
@@ -750,7 +800,7 @@ int mainScheduler(FILE *fileFDInput)
             if (listRunnables(headNode))
             {
 
-                printf("Queue is empty \n");
+                printf("None \n");
             }
 
             break;
@@ -758,8 +808,8 @@ int mainScheduler(FILE *fileFDInput)
 
             if (!currentRunningJob)
             {
-
-                printf("Error. System is idle. \n");
+                printf("Running: \n");
+                printf("None \n");
 
                 break;
             }
@@ -778,7 +828,7 @@ int mainScheduler(FILE *fileFDInput)
             if (listBlocked(headNode))
             {
 
-                printf("Queue is empty \n");
+                printf("None \n");
             }
 
             break;
@@ -788,8 +838,13 @@ int mainScheduler(FILE *fileFDInput)
     }
 
     freeTheQueue(headNode);
-    free(currentRunningJob->theJob);
-    free(currentRunningJob);
+    if(currentRunningJob){
+
+        free(currentRunningJob->theJob);
+        free(currentRunningJob);
+
+    }
+    
 
     if(NextRunningJob){
 
@@ -804,12 +859,14 @@ int mainScheduler(FILE *fileFDInput)
 int main(int argc, char *argv[])
 {
 
-    char *schecdularJobFileInputPath = NULL;
+   struct argStruct argHolder;
+
+   memset(&argHolder,0,sizeof(struct argStruct));
 
     FILE *fileFD = NULL;
 
     // setup program by getting input file argument and opening the file
-    if (handleArgs(argc, argv, schecdularJobFileInputPath))
+    if (handleArgs(argc, argv, &argHolder))
     {
 
         printf("error in handle args: invaild argument given \n");
@@ -817,7 +874,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (!(fileFD = fopen(schecdularJobFileInputPath, "r")))
+    if (!(fileFD = fopen(argHolder.inputFIleDest, "r")))
     {
 
         perror("error in fopen(schecdularJobFileInputPath,\"r\"): ");
