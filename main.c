@@ -88,7 +88,6 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
     */
 
     // set up local variables
-    char *currentStringPos = jobStringInput;
     int baseCount = 0;
     int whiteSpaceCount = 0;
     char copyStringBuffer[100];
@@ -116,6 +115,7 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
     if (!strncmp(jobStringInput, "newjob", whiteSpaceCount))
     {
 
+        //loop to get name of job
         jobInfoInput->jobType = 0;
         baseCount = ++whiteSpaceCount;
         while (1)
@@ -137,6 +137,7 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
 
         baseCount = ++whiteSpaceCount;
 
+        //loop to get job priorty
         while (1)
         {
 
@@ -186,7 +187,7 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
     {
 
         jobInfoInput->jobType = 4;
-
+        //loop to get job name to unblock
         baseCount = ++whiteSpaceCount;
         while (1)
         {
@@ -254,19 +255,27 @@ int getJob(FILE *fileFDInput, struct jobInfo *jobInfoInput)
         return 1;
     }
 
-    // translate the string into a job
-    if ((translateJobRetVal = translateJob(jobString, jobInfoInput)))
+    if (jobString[0] != '\n' && jobString[0] != 0 && jobString[0] != ',')
     {
-        // if there is an error print what happend and return 1
-        if (translateJobRetVal == 2)
+        // translate the string into a job
+        if ((translateJobRetVal = translateJob(jobString, jobInfoInput)))
         {
+            // if there is an error print what happend and return 1
+            if (translateJobRetVal == 2)
+            {
 
-            printf("error in translateJob(): expected job opcode \n");
+                printf("error in translateJob(): expected job opcode \n");
+            }
+
+            printf("error in translateJob() \n");
+
+            return 1;
         }
-
-        printf("error in translateJob() \n");
-
-        return 1;
+    }
+    else
+    {
+        //if string has bad values return a junk jobtype value
+        jobInfoInput->jobType = 8;
     }
 
     // free the string the came from getline() since we now have it in are struct
@@ -276,7 +285,7 @@ int getJob(FILE *fileFDInput, struct jobInfo *jobInfoInput)
 }
 
 int alphabeticalOrder(struct jobState *job1, struct jobState *job2)
-{
+{//if a tie with pass values is found based on job names go through untill you find a greater value
 
     for (int i = 0; i < 100; i++)
     {
@@ -315,7 +324,8 @@ int alphabeticalOrder(struct jobState *job1, struct jobState *job2)
 }
 
 void resetQueuePassVals(struct jobQueue *queueInput)
-{
+{// used to create a more fair pass value set if a newjob is added latter by reseting all pass values in the list
+//currently not being used
 
     struct jobQueue *currentNode = queueInput->nextLink;
 
@@ -338,7 +348,7 @@ void resetQueuePassVals(struct jobQueue *queueInput)
 }
 
 int addJobToQueue(struct jobQueue *queueInput, struct jobInfo newJobInput)
-{
+{//create a whole new node from the newjob command and add it to the list
 
     struct jobQueue *currentNode = queueInput;
     struct jobQueue *prevNode = queueInput;
@@ -363,23 +373,25 @@ int addJobToQueue(struct jobQueue *queueInput, struct jobInfo newJobInput)
     }
 
     newNode->theJob->jobPriority = newJobInput.jobPriority;
-    newNode->theJob->stride = UINT_MAX / newJobInput.jobPriority;
+    newNode->theJob->stride = 100000 / newJobInput.jobPriority;
     newNode->theJob->passLevel = newNode->theJob->stride;
     strcpy(newNode->theJob->jobName, newJobInput.jobName);
 
-    resetQueuePassVals(queueInput);
+    // used for fair new entry : other purpose
+    // resetQueuePassVals(queueInput);
 
+    //all comments in void reAddToQueue()'s while loop and down apply here
     while ((currentNode = currentNode->nextLink))
     {
 
         if (currentNode->theJob->passLevel > newNode->theJob->passLevel)
         {
 
-            currentNode->backLink->nextLink = newNode;
-            currentNode->backLink = newNode;
-
             newNode->backLink = currentNode->backLink;
             newNode->nextLink = currentNode;
+
+            currentNode->backLink->nextLink = newNode;
+            currentNode->backLink = newNode;
 
             return 0;
         }
@@ -389,11 +401,11 @@ int addJobToQueue(struct jobQueue *queueInput, struct jobInfo newJobInput)
             if (alphabeticalOrder(currentNode->theJob, newNode->theJob))
             {
 
-                currentNode->backLink->nextLink = newNode;
-                currentNode->backLink = newNode;
-
                 newNode->backLink = currentNode->backLink;
                 newNode->nextLink = currentNode;
+
+                currentNode->backLink->nextLink = newNode;
+                currentNode->backLink = newNode;
 
                 return 0;
             }
@@ -412,54 +424,62 @@ int addJobToQueue(struct jobQueue *queueInput, struct jobInfo newJobInput)
 }
 
 void reAddToQueue(struct jobQueue *queueInput, struct jobQueue *jobToReAdd)
-{
+{//readd a the former current running job back into the list
 
     struct jobQueue *currentNode = queueInput;
     struct jobQueue *prevNode = queueInput;
 
-    if (!currentNode->nextLink)
+    if (!currentNode->nextLink)//if the list is only just the head
     {
 
-        currentNode->nextLink = jobToReAdd;
         jobToReAdd->backLink = currentNode;
         jobToReAdd->nextLink = NULL;
+        currentNode->nextLink = jobToReAdd;
+        
 
         return;
     }
 
     while ((currentNode = currentNode->nextLink))
     {
-
+        //iterate through the list comparing pass values
+        //if the pass value of the current node is greater then the one we are adding
+        //insert it before that node
         if (currentNode->theJob->passLevel > jobToReAdd->theJob->passLevel)
         {
-
-            currentNode->backLink->nextLink = jobToReAdd;
-            currentNode->backLink = jobToReAdd;
 
             jobToReAdd->backLink = currentNode->backLink;
             jobToReAdd->nextLink = currentNode;
 
+            currentNode->backLink->nextLink = jobToReAdd;
+            currentNode->backLink = jobToReAdd;
+
+            
+
             return;
-        }
+        }//check to see if the pass values where equal
         else if (currentNode->theJob->passLevel == jobToReAdd->theJob->passLevel)
         {
-
+            //if they were determine the order by alphabetical order
             if (alphabeticalOrder(currentNode->theJob, jobToReAdd->theJob))
             {
+                //if are readded node is a winner add it before the current node
+                jobToReAdd->nextLink = currentNode;
+                jobToReAdd->backLink = currentNode->backLink;
 
                 currentNode->backLink->nextLink = jobToReAdd;
-                currentNode->backLink = jobToReAdd;
 
-                jobToReAdd->backLink = currentNode->backLink;
-                jobToReAdd->nextLink = currentNode;
+                currentNode->backLink = jobToReAdd;
 
                 return;
             }
+            //if not then keep searching
         }
 
         prevNode = currentNode;
     }
 
+    // done only if we reached the end of the list thus placeing the node at the end
     prevNode->nextLink = jobToReAdd;
 
     jobToReAdd->backLink = prevNode;
@@ -468,7 +488,7 @@ void reAddToQueue(struct jobQueue *queueInput, struct jobQueue *jobToReAdd)
 }
 
 struct jobQueue *getMinJob(struct jobQueue *queueInput)
-{
+{//get the job from the list with the lowest pass value
 
     struct jobQueue *currentNode = queueInput->nextLink;
 
@@ -476,6 +496,7 @@ struct jobQueue *getMinJob(struct jobQueue *queueInput)
 
     while (currentNode)
     {
+        //the list is already sorted but iterate through it to find the first non-blocked job
 
         if (!currentNode->theJob->blocked)
         {
@@ -488,7 +509,7 @@ struct jobQueue *getMinJob(struct jobQueue *queueInput)
         currentNode = currentNode->nextLink;
     }
 
-    if (returnJob)
+    if (returnJob)//if a job was found remove it from the list
     {
 
         if (returnJob->backLink)
@@ -516,39 +537,46 @@ struct jobQueue *unblockJob(struct jobQueue *queueInput, struct jobInfo nameOfJo
 
     while ((currentNode = currentNode->nextLink))
     {
-
+        //check to see if the name of the job to the current node it the same as the one we want to unblock
         if (!strcmp(currentNode->theJob->jobName, nameOfJobInput.jobName))
         {
 
             if (currentNode->theJob->blocked)
             {
-
+                //found job, unblocked it, and return a pointer to it
                 currentNode->theJob->blocked = 0;
 
-                if (currentNode->backLink)
-                {
-
-                    currentNode->backLink->nextLink = currentNode->nextLink;
-                }
-
-                if (currentNode->nextLink)
-                {
+                /*uncomment incase of blocked sorting issue (it should not be a problem but incase this will solve it)
+                if(currentNode->nextLink){
 
                     currentNode->nextLink->backLink = currentNode->backLink;
+
                 }
+
+                if(currentNode->backLink){
+
+                    currentNode->backLink->nextLink = currentNode->nextLink;
+
+                }
+
+                currentNode->backLink = NULL;
+                currentNode->nextLink = NULL;
+
+                reAddToQueue(queueInput,currentNode);
+                */
 
                 return currentNode;
             }
             else
             {
-
+                //job found but not blocked
                 *runStatus = 1;
 
                 return NULL;
             }
         }
     }
-
+    //did not find job
     *runStatus = 2;
 
     return NULL;
@@ -559,13 +587,15 @@ int listBlocked(struct jobQueue *queueInput)
 
     struct jobQueue *currentNode = queueInput;
 
-    if (!currentNode->nextLink)
+    printf("Blocked: \n");
+
+    if (!currentNode->nextLink)//if the list is only the head, end the function
     {
 
         return 1;
     }
 
-    printf("Blocked: \n");
+    
     printf("NAME    STRIDE  PASS  PRI \n");
 
     while ((currentNode = currentNode->nextLink))
@@ -586,13 +616,15 @@ int listRunnables(struct jobQueue *queueInput)
 
     struct jobQueue *currentNode = queueInput;
 
-    if (!currentNode->nextLink)
+    printf("Runnable: \n");
+
+    if (!currentNode->nextLink)//if the list is only the head, end the function
     {
 
         return 1;
     }
 
-    printf("Runnable: \n");
+    
     printf("NAME    STRIDE  PASS  PRI \n");
 
     while ((currentNode = currentNode->nextLink))
@@ -614,7 +646,7 @@ void freeTheQueue(struct jobQueue *queueInput)
     struct jobQueue *currentNode = queueInput->nextLink;
     struct jobQueue *prevNode = queueInput->nextLink;
 
-    if (!prevNode)
+    if (!prevNode)//if the list is only just the head
     {
 
         free(queueInput);
@@ -622,7 +654,7 @@ void freeTheQueue(struct jobQueue *queueInput)
         return;
     }
 
-    if (!currentNode->nextLink)
+    if (!currentNode->nextLink)//if the list is only the head plus one node
     {
 
         free(currentNode->theJob);
@@ -632,6 +664,7 @@ void freeTheQueue(struct jobQueue *queueInput)
         return;
     }
 
+    //if the list contains more the 2
     while ((currentNode = currentNode->nextLink))
     {
 
@@ -648,7 +681,7 @@ void freeTheQueue(struct jobQueue *queueInput)
 
 int mainScheduler(FILE *fileFDInput)
 {
-
+    //set up variable and structs
     struct jobInfo currentJob;
 
     struct jobQueue *headNode = calloc(1, sizeof(struct jobQueue));
@@ -669,13 +702,15 @@ int mainScheduler(FILE *fileFDInput)
 
     memset(&currentJob, 0, sizeof(struct jobInfo));
 
-    while (!getJob(fileFDInput, &currentJob))
+    //main loop
+
+    while (!getJob(fileFDInput, &currentJob))//get a job from file
     {
 
         switch (currentJob.jobType)
         {
-        case 0:
-
+        case 0://add a new job
+            
             if (addJobToQueue(headNode, currentJob))
             {
 
@@ -684,10 +719,14 @@ int mainScheduler(FILE *fileFDInput)
                 return 1;
             }
 
+            printf("New job: %s added with priority: %d \n", currentJob.jobName, currentJob.jobPriority);
+
+            //check to see if there is a current job 
+            //if not then get one other wise break from case
             if (currentRunningJob)
             {
-
-                currentRunningJob->theJob->passLevel = currentRunningJob->theJob->stride;
+                //something from earlier version
+                // currentRunningJob->theJob->passLevel = currentRunningJob->theJob->stride;
             }
             else
             {
@@ -695,17 +734,16 @@ int mainScheduler(FILE *fileFDInput)
                 if (!(currentRunningJob = getMinJob(headNode)))
                 {
 
-                    printf("No jobs in Queue \n");
+                    printf("System is idle. \n");
 
                     break;
                 }
+
+                printf("Job: %s scheduled. \n", currentRunningJob->theJob->jobName);
             }
 
-            printf("New job: %s added with priority: %d \n", currentJob.jobName, currentJob.jobPriority);
-            printf("Job: %s scheduled. \n", currentRunningJob->theJob->jobName);
-
             break;
-        case 1:
+        case 1://the current job is done running
 
             if (!currentRunningJob)
             {
@@ -717,9 +755,10 @@ int mainScheduler(FILE *fileFDInput)
 
             printf("Job: %s completed. \n", currentRunningJob->theJob->jobName);
 
+            //free the node and its componets
             free(currentRunningJob->theJob);
             free(currentRunningJob);
-            currentRunningJob = NULL;
+            currentRunningJob = NULL;//always null the current job when a switch occurs just in case
 
             if (!(currentRunningJob = getMinJob(headNode)))
             {
@@ -733,7 +772,7 @@ int mainScheduler(FILE *fileFDInput)
             }
 
             break;
-        case 2:
+        case 2://the job has completed its quantum 
 
             if (!currentRunningJob)
             {
@@ -743,7 +782,11 @@ int mainScheduler(FILE *fileFDInput)
                 break;
             }
 
+
+            //add the job back on to the list in proper order
             reAddToQueue(headNode, currentRunningJob);
+
+            currentRunningJob = NULL;//null the job as always
 
             if (!(currentRunningJob = getMinJob(headNode)))
             {
@@ -756,7 +799,7 @@ int mainScheduler(FILE *fileFDInput)
             printf("Job: %s scheduled. \n", currentRunningJob->theJob->jobName);
 
             break;
-        case 3:
+        case 3://block current job
 
             if (!currentRunningJob)
             {
@@ -768,50 +811,68 @@ int mainScheduler(FILE *fileFDInput)
 
             printf("Job: %s blocked. \n", currentRunningJob->theJob->jobName);
 
+            //set job status to block before addeding it back on to list
             currentRunningJob->theJob->blocked = 1;
+
+            reAddToQueue(headNode, currentRunningJob);
+
+            currentRunningJob = NULL;
 
             if (!(currentRunningJob = getMinJob(headNode)))
             {
 
-                printf("No jobs in Queue \n");
+                printf("System is idle. \n");
 
                 break;
             }
+            else
+            {
+
+                printf("Job: %s scheduled. \n", currentRunningJob->theJob->jobName);
+            }
 
             break;
-        case 4:
+        case 4://unblock specified job (as if the bottom function was not enough of a hint)
 
             if (!(NextRunningJob = unblockJob(headNode, currentJob, &functionReturnCode)))
             {
 
                 if (functionReturnCode == 2)
-                {
+                {//could not find job in list
 
-                    printf("No such job to unblock \n");
+                    printf("Error. Job: %s not blocked. \n", currentJob.jobName);
 
                     break;
                 }
                 else
-                {
+                {//job found but is not blocked
 
                     printf("Error. Job: %s not blocked. \n", currentJob.jobName);
 
                     break;
                 }
             }
-
-            NextRunningJob->theJob->passLevel += NextRunningJob->theJob->stride;
-
-            printf("Job: %s has unblocked. Pass set to: %d \n", NextRunningJob->theJob->jobName, NextRunningJob->theJob->passLevel);
-
+            //since unblocking the job (if it worked) get a new job 
             reAddToQueue(headNode, currentRunningJob);
 
-            currentRunningJob = NextRunningJob;
+            currentRunningJob = NULL;
+
+            if (!(currentRunningJob = getMinJob(headNode)))
+            {
+                printf("Job: %s has unblocked. Pass set to: %d \n", NextRunningJob->theJob->jobName, NextRunningJob->theJob->passLevel);
+                printf("System is idle. \n");
+            }
+            else
+            {
+
+                printf("Job: %s has unblocked. Pass set to: %d \n", NextRunningJob->theJob->jobName, NextRunningJob->theJob->passLevel);
+                printf("Job: %s scheduled. \n", currentRunningJob->theJob->jobName);
+            }
 
             NextRunningJob = NULL;
 
             break;
-        case 5:
+        case 5://list possible job to run in order
 
             if (listRunnables(headNode))
             {
@@ -820,7 +881,7 @@ int mainScheduler(FILE *fileFDInput)
             }
 
             break;
-        case 6:
+        case 6://list what is currently running
 
             if (!currentRunningJob)
             {
@@ -839,7 +900,7 @@ int mainScheduler(FILE *fileFDInput)
             }
 
             break;
-        case 7:
+        case 7://list what is blocked
 
             if (listBlocked(headNode))
             {
@@ -848,7 +909,7 @@ int mainScheduler(FILE *fileFDInput)
             }
 
             break;
-        default:
+        default://garbage jobs case
             break;
         }
     }
@@ -859,13 +920,6 @@ int mainScheduler(FILE *fileFDInput)
 
         free(currentRunningJob->theJob);
         free(currentRunningJob);
-    }
-
-    if (NextRunningJob)
-    {
-
-        free(NextRunningJob->theJob);
-        free(NextRunningJob);
     }
 
     return 0;
