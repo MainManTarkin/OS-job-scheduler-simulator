@@ -15,7 +15,6 @@ struct jobInfo
     int jobPriority;
     int strideVal;
     int passVal;
-    
 };
 
 struct jobQueue
@@ -217,27 +216,82 @@ int getJob(int jobFD, struct jobInfo *jobInfoInput)
     return 0;
 }
 
-struct jobInfo getLowestJob(struct jobQueue *jobQueueInput, int queueSizeInput)
+int alphabeticalDetermine(char *stringInput1, char *stringInput2)
 {
 
-    struct jobInfo jobInfoRet;
+    while (1)
+    {
 
-    jobInfoRet.passVal = 10000;
+        if (stringInput1 > stringInput2)
+        {
 
-    for(int i = 0; i < queueSizeInput; i++){
+            return 1;
+        }
+        else if (stringInput1 < stringInput2)
+        {
 
-        if(jobInfoRet.passVal > jobQueueInput[i].job.passVal){
-
-            jobInfoRet = jobQueueInput[i].job;
-
-        }else if(jobInfoRet.passVal == jobQueueInput[i].job.passVal){
-
-            if()
-
+            return 2;
         }
 
+        if (stringInput1 == 0 && stringInput2 == 0)
+        {
+
+            return 0;
+        }
+        else if (stringInput1 == 0)
+        {
+
+            return 2;
+        }
+        else if (stringInput2 == 0)
+        {
+
+            return 1;
+        }
+
+        stringInput1++;
+        stringInput2++;
+    }
+}
+
+int getLowestJob(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo *jobLowest)
+{
+
+    struct jobInfo *jobInfoRet;
+
+    jobInfoRet->passVal = 10000;
+
+    int returnVal = 1;
+
+    for (int i = 0; i < queueSizeInput; i++)
+    {
+        if (jobQueueInput[i].freeSlot && !jobQueueInput[i].jobBlocked)
+        {
+
+            returnVal = 0;
+
+            if (jobInfoRet->passVal > jobQueueInput[i].job.passVal)
+            {
+
+                jobInfoRet = &jobQueueInput[i].job;
+            }
+            else if (jobInfoRet->passVal == jobQueueInput[i].job.passVal)
+            {
+
+                if (alphabeticalDetermine(jobInfoRet->jobName, jobQueueInput[i].job.jobName) == 1)
+                {
+
+                    jobInfoRet = &jobQueueInput[i].job;
+                }
+            }
+        }
     }
 
+    jobLowest = jobInfoRet;
+
+    jobLowest->passVal += jobLowest->strideVal;
+
+    return returnVal;
 }
 
 int expandQueueSize(struct jobQueue *jobQueueInput, int queueSizeInput)
@@ -262,10 +316,10 @@ int expandQueueSize(struct jobQueue *jobQueueInput, int queueSizeInput)
 
             newJobQueueInput[i].freeSlot = 1;
             newJobQueueInput[i].job = jobQueueInput[i].job;
-            newJobQueueInput[i].jobBlocked =jobQueueInput[i].jobBlocked;
+            newJobQueueInput[i].jobBlocked = jobQueueInput[i].jobBlocked;
         }
     }
- 
+
     free(jobQueueInput);
 
     jobQueueInput = newJobQueueInput;
@@ -273,14 +327,14 @@ int expandQueueSize(struct jobQueue *jobQueueInput, int queueSizeInput)
     return queueSizeInput + 10;
 }
 
-void resetQueuePass(struct jobQueue *jobQueueInput, int queueSizeInput){
+void resetQueuePass(struct jobQueue *jobQueueInput, int queueSizeInput)
+{
 
-    for(int i = 0; i < queueSizeInput; i++){
+    for (int i = 0; i < queueSizeInput; i++)
+    {
 
         jobQueueInput[i].job.passVal = jobQueueInput[i].job.strideVal;
-
     }
-
 }
 
 int addJobToQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo newJobInput)
@@ -307,25 +361,101 @@ int addJobToQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct job
 
                 jobQueueInput[i].freeSlot = 1;
 
-                resetQueuePass(jobQueueInput,queueSizeInput);
+                resetQueuePass(jobQueueInput, queueSizeInput);
 
                 return queueSizeInput;
             }
         }
 
-        if(queueSizeInput = expandQueueSize(jobQueueInput,queueSizeInput)){
+        if (queueSizeInput = expandQueueSize(jobQueueInput, queueSizeInput))
+        {
 
             return 1;
+        }
+    }
+}
+
+void unblockJob(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo jobToUnblockInput){
+
+    for (int i = 0; i < queueSizeInput; i++)
+    {
+        
+        if(!strcmp(jobQueueInput[i].job.jobName,jobToUnblockInput.jobName)){
+
+            jobQueueInput[i].jobBlocked = 0;
+
+            break;
 
         }
 
     }
+    
+
+}
+
+void blockJob(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo *jobToBlockInput){
+
+    for (int i = 0; i < queueSizeInput; i++)
+    {
+
+        if (&jobQueueInput[i].job == jobToBlockInput)
+        {
+
+            jobQueueInput[i].jobBlocked = 1;
+        }
+    }
+
+}
+
+void removeFromQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo *removedJobInput)
+{
+
+    for (int i = 0; i < queueSizeInput; i++)
+    {
+
+        if (&jobQueueInput[i].job == removedJobInput)
+        {
+
+            jobQueueInput[i].freeSlot = 0;
+        }
+    }
+}
+
+void listRunnables(struct jobQueue *jobQueueInput, int queueSizeInput){
+
+    struct jobInfo *tempStoredJob = NULL;
+
+    int anyRunnables = 0;
+
+    for(int i = 0; i < queueSizeInput; i++){
+
+        if(jobQueueInput[i].freeSlot && !jobQueueInput[i].jobBlocked){
+
+            anyRunnables = 1;
+
+            tempStoredJob = &jobQueueInput[i];
+
+            for(int x = 0; x < queueSizeInput; x++){
+
+                if(tempStoredJob->passVal > jobQueueInput[x].job.passVal){
+
+
+
+                }
+
+            }
+
+        }
+
+    }
+
 }
 
 int mainScheduler(int jobListFD)
 {
 
     struct jobInfo currentJob;
+    struct jobInfo *runningJob = NULL;
 
     int queueSize = 10;
     struct jobQueue *jobsQueue = calloc(10, sizeof(struct jobQueue));
@@ -347,14 +477,82 @@ int mainScheduler(int jobListFD)
         {
         case 0:
 
+            if ((queueSize = addJobToQueue(jobsQueue, queueSize, currentJob)) == 1)
+            {
+
+                return 1;
+            }
+
+            if (!runningJob)
+            {
+
+                if (getLowestJob(jobsQueue, queueSize, runningJob))
+                {
+
+                    runningJob = NULL;
+                }
+            }
+
+            printf("New job: %s added with priority: %d", currentJob.jobName, currentJob.jobPriority);
+
             break;
         case 1:
+
+            if (!runningJob)
+            {
+
+                printf("Error. System is idle. \n");
+            }
+
+            removeFromQueue(jobsQueue, queueSize, runningJob);
+
+            printf("Job: %s completed.", runningJob->jobName);
+
+            if (getLowestJob(jobsQueue, queueSize, runningJob))
+            {
+
+                runningJob = NULL;
+            }
 
             break;
         case 2:
 
+            if (!runningJob)
+            {
+
+                printf("Error. System is idle. \n");
+            }
+
+            if (getLowestJob(jobsQueue, queueSize, runningJob))
+            {
+
+                runningJob = NULL;
+
+            }else{
+
+                printf("Job: %s scheduled.", runningJob->jobName);
+
+            }
+
             break;
         case 3:
+
+            if (!runningJob)
+            {
+
+                printf("Error. System is idle. \n");
+            }
+
+            blockJob(jobsQueue, queueSize, runningJob);
+
+            printf("Job: %s blocked.", runningJob->jobName);
+
+            if (getLowestJob(jobsQueue, queueSize, runningJob))
+            {
+
+                runningJob = NULL;
+
+            }
 
             break;
         case 4:
