@@ -15,6 +15,7 @@ struct jobInfo
     int jobPriority;
     int strideVal;
     int passVal;
+    
 };
 
 struct jobQueue
@@ -23,6 +24,8 @@ struct jobQueue
     struct jobInfo job;
 
     char freeSlot;
+
+    char jobBlocked;
 };
 
 // handle incoming argument vector
@@ -216,6 +219,25 @@ int getJob(int jobFD, struct jobInfo *jobInfoInput)
 
 struct jobInfo getLowestJob(struct jobQueue *jobQueueInput, int queueSizeInput)
 {
+
+    struct jobInfo jobInfoRet;
+
+    jobInfoRet.passVal = 10000;
+
+    for(int i = 0; i < queueSizeInput; i++){
+
+        if(jobInfoRet.passVal > jobQueueInput[i].job.passVal){
+
+            jobInfoRet = jobQueueInput[i].job;
+
+        }else if(jobInfoRet.passVal == jobQueueInput[i].job.passVal){
+
+            if()
+
+        }
+
+    }
+
 }
 
 int expandQueueSize(struct jobQueue *jobQueueInput, int queueSizeInput)
@@ -240,14 +262,25 @@ int expandQueueSize(struct jobQueue *jobQueueInput, int queueSizeInput)
 
             newJobQueueInput[i].freeSlot = 1;
             newJobQueueInput[i].job = jobQueueInput[i].job;
+            newJobQueueInput[i].jobBlocked =jobQueueInput[i].jobBlocked;
         }
     }
-
+ 
     free(jobQueueInput);
 
     jobQueueInput = newJobQueueInput;
 
     return queueSizeInput + 10;
+}
+
+void resetQueuePass(struct jobQueue *jobQueueInput, int queueSizeInput){
+
+    for(int i = 0; i < queueSizeInput; i++){
+
+        jobQueueInput[i].job.passVal = jobQueueInput[i].job.strideVal;
+
+    }
+
 }
 
 int addJobToQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct jobInfo newJobInput)
@@ -256,6 +289,7 @@ int addJobToQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct job
     struct jobQueue *newJobQueueInput = NULL;
 
     newJobInput.strideVal = 10000 / newJobInput.jobPriority;
+    newJobInput.passVal = newJobInput.strideVal;
 
     while (1)
     {
@@ -272,6 +306,8 @@ int addJobToQueue(struct jobQueue *jobQueueInput, int queueSizeInput, struct job
                 strcpy(jobQueueInput[i].job.jobName, newJobInput.jobName);
 
                 jobQueueInput[i].freeSlot = 1;
+
+                resetQueuePass(jobQueueInput,queueSizeInput);
 
                 return queueSizeInput;
             }
