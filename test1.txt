@@ -1,4 +1,9 @@
-newjob,a,100
+newjob,A,100
+newjob,B,100
 interrupt
 interrupt
-finish
+interrupt
+interrupt
+interrupt
+interrupt
+interrupt

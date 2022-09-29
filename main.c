@@ -6,10 +6,10 @@
 #include <errno.h>
 #include <limits.h>
 
-struct argStruct{
+struct argStruct
+{
 
     char *inputFIleDest;
-
 };
 
 struct jobInfo
@@ -96,20 +96,20 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
     memset(&copyStringBuffer, 0, sizeof(copyStringBuffer));
 
     // find where the string ends either with a comman or a newline
-    while(1){
+    while (1)
+    {
 
-        if(jobStringInput[whiteSpaceCount] != ','  && jobStringInput[whiteSpaceCount] != '\n' && jobStringInput[whiteSpaceCount] != 0){
+        if (jobStringInput[whiteSpaceCount] != ',' && jobStringInput[whiteSpaceCount] != '\n' && jobStringInput[whiteSpaceCount] != 0)
+        {
 
             whiteSpaceCount++;
-
-        }else{
+        }
+        else
+        {
 
             break;
-
         }
-
     }
-    
 
     // compare the full string to some consts to find what job it is and set struct accordingly
     // job values are listed at top
@@ -121,16 +121,16 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
         while (1)
         {
 
-            if(jobStringInput[whiteSpaceCount] != ','){
+            if (jobStringInput[whiteSpaceCount] != ',')
+            {
 
                 whiteSpaceCount++;
-                
-            }else{
+            }
+            else
+            {
 
                 break;
-
             }
-            
         }
 
         strncpy(jobInfoInput->jobName, jobStringInput + baseCount, whiteSpaceCount - baseCount);
@@ -140,17 +140,16 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
         while (1)
         {
 
-            if(jobStringInput[whiteSpaceCount] != 0 && jobStringInput[whiteSpaceCount] != '\n'){
+            if (jobStringInput[whiteSpaceCount] != 0 && jobStringInput[whiteSpaceCount] != '\n')
+            {
 
                 whiteSpaceCount++;
-                
-            }else{
+            }
+            else
+            {
 
                 break;
-
             }
-            
-            
         }
 
         strncpy(copyStringBuffer, jobStringInput + baseCount, whiteSpaceCount - baseCount);
@@ -192,20 +191,19 @@ int translateJob(char *jobStringInput, struct jobInfo *jobInfoInput)
         while (1)
         {
 
-            if(jobStringInput[whiteSpaceCount] != 0 && jobStringInput[whiteSpaceCount] != '\n'){
+            if (jobStringInput[whiteSpaceCount] != 0 && jobStringInput[whiteSpaceCount] != '\n')
+            {
 
                 whiteSpaceCount++;
-                
-            }else{
+            }
+            else
+            {
 
                 break;
-
             }
-            
-            
         }
 
-        strncpy(jobInfoInput->jobName, jobStringInput+baseCount, whiteSpaceCount - baseCount);
+        strncpy(jobInfoInput->jobName, jobStringInput + baseCount, whiteSpaceCount - baseCount);
         return 0;
     }
     else if (!strncmp(jobStringInput, "runnable", whiteSpaceCount))
@@ -234,7 +232,7 @@ int getJob(FILE *fileFDInput, struct jobInfo *jobInfoInput)
 {
     // set up variables
     size_t jobStringSize = 255;
-    char *jobString = calloc(jobStringSize,sizeof(char));
+    char *jobString = calloc(jobStringSize, sizeof(char));
     int translateJobRetVal = 0;
     ssize_t bytesRead = 0;
 
@@ -423,6 +421,8 @@ void reAddToQueue(struct jobQueue *queueInput, struct jobQueue *jobToReAdd)
     {
 
         currentNode->nextLink = jobToReAdd;
+        jobToReAdd->backLink = currentNode;
+        jobToReAdd->nextLink = NULL;
 
         return;
     }
@@ -488,19 +488,23 @@ struct jobQueue *getMinJob(struct jobQueue *queueInput)
         currentNode = currentNode->nextLink;
     }
 
-    if (returnJob->backLink)
+    if (returnJob)
     {
 
-        returnJob->backLink->nextLink = returnJob->nextLink;
+        if (returnJob->backLink)
+        {
+
+            returnJob->backLink->nextLink = returnJob->nextLink;
+        }
+
+        if (returnJob->nextLink)
+        {
+
+            returnJob->nextLink->backLink = returnJob->backLink;
+        }
+
+        returnJob->theJob->passLevel += returnJob->theJob->stride;
     }
-
-    if (returnJob->nextLink)
-    {
-
-        returnJob->nextLink->backLink = returnJob->backLink;
-    }
-
-    returnJob->theJob->passLevel += returnJob->theJob->stride;
 
     return returnJob;
 }
@@ -604,43 +608,42 @@ int listRunnables(struct jobQueue *queueInput)
     return 0;
 }
 
-void freeTheQueue(struct jobQueue *queueInput){
+void freeTheQueue(struct jobQueue *queueInput)
+{
 
     struct jobQueue *currentNode = queueInput->nextLink;
     struct jobQueue *prevNode = queueInput->nextLink;
 
-    if(!prevNode){
+    if (!prevNode)
+    {
 
         free(queueInput);
 
         return;
-
     }
 
-    if(!currentNode->nextLink){
+    if (!currentNode->nextLink)
+    {
 
         free(currentNode->theJob);
         free(currentNode);
         free(queueInput);
 
         return;
-
     }
 
     while ((currentNode = currentNode->nextLink))
     {
-        
+
         free(prevNode->theJob);
         free(prevNode);
 
         prevNode = currentNode;
-
     }
 
     free(prevNode->theJob);
     free(prevNode);
     free(queueInput);
-
 }
 
 int mainScheduler(FILE *fileFDInput)
@@ -699,6 +702,7 @@ int mainScheduler(FILE *fileFDInput)
             }
 
             printf("New job: %s added with priority: %d \n", currentJob.jobName, currentJob.jobPriority);
+            printf("Job: %s scheduled. \n", currentRunningJob->theJob->jobName);
 
             break;
         case 1:
@@ -715,6 +719,18 @@ int mainScheduler(FILE *fileFDInput)
 
             free(currentRunningJob->theJob);
             free(currentRunningJob);
+            currentRunningJob = NULL;
+
+            if (!(currentRunningJob = getMinJob(headNode)))
+            {
+
+                printf("System is idle. \n");
+            }
+            else
+            {
+
+                printf("Job: %s scheduled. \n", currentRunningJob->theJob->jobName);
+            }
 
             break;
         case 2:
@@ -732,7 +748,7 @@ int mainScheduler(FILE *fileFDInput)
             if (!(currentRunningJob = getMinJob(headNode)))
             {
 
-                printf("No jobs in Queue \n");
+                printf("System is idle. \n");
 
                 break;
             }
@@ -838,19 +854,18 @@ int mainScheduler(FILE *fileFDInput)
     }
 
     freeTheQueue(headNode);
-    if(currentRunningJob){
+    if (currentRunningJob)
+    {
 
         free(currentRunningJob->theJob);
         free(currentRunningJob);
-
     }
-    
 
-    if(NextRunningJob){
+    if (NextRunningJob)
+    {
 
         free(NextRunningJob->theJob);
         free(NextRunningJob);
-
     }
 
     return 0;
@@ -859,9 +874,9 @@ int mainScheduler(FILE *fileFDInput)
 int main(int argc, char *argv[])
 {
 
-   struct argStruct argHolder;
+    struct argStruct argHolder;
 
-   memset(&argHolder,0,sizeof(struct argStruct));
+    memset(&argHolder, 0, sizeof(struct argStruct));
 
     FILE *fileFD = NULL;
 
@@ -883,15 +898,15 @@ int main(int argc, char *argv[])
     }
     // finish setup start performing scheduling
 
-    if(mainScheduler(fileFD)){
+    if (mainScheduler(fileFD))
+    {
 
         printf("error in mainScheduler() \n");
 
         return 1;
-
     }
 
-    //close the file stream
+    // close the file stream
     if (fclose(fileFD))
     {
 
