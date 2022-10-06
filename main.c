@@ -853,7 +853,11 @@ int mainScheduler(FILE *fileFDInput)
                 }
             }
             //since unblocking the job (if it worked) get a new job 
-            reAddToQueue(headNode, currentRunningJob);
+            if(currentRunningJob){
+            
+                reAddToQueue(headNode, currentRunningJob);
+
+            }
 
             currentRunningJob = NULL;
 
