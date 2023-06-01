@@ -1,3 +1,10 @@
+/*------------------------------------
+*   This project was created as per a college lesson for OS dev. 
+*   It simulates a stride scheduler in a Linux environment.
+*-------------------------------------
+*/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,6 +12,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
+#include <getopt.h>
 
 struct argStruct
 {
